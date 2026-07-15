@@ -1,96 +1,145 @@
-# Registro Hora a Hora — Pintura (Camisas / Ómera)
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Registro Hora a Hora — Pintura</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
 
-App web con base de datos compartida (Supabase) para reemplazar el copy-paste manual
-del pizarrón hacia la planilla acumulada. Cualquier turno, desde cualquier dispositivo,
-carga sus horas y todo queda en una única base consultable.
+  <header class="app-header">
+    <div>
+      <h1>Registro Hora a Hora — Pintura</h1>
+      <p class="subtitle">Camisas / Ómera — carga diaria y consulta histórica</p>
+    </div>
+    <div class="logo-badge"><img src="assets/escorial-logo.png" alt="Escorial"></div>
+  </header>
 
-## 1. Completar la conexión a Supabase
+  <nav class="tabs" id="tabs">
+    <button class="tab active" data-tab="cargar">Cargar</button>
+    <button class="tab" data-tab="consultar">Consultar</button>
+  </nav>
 
-Editá `config.js` y pegá tus datos reales (Settings → API en tu proyecto Supabase):
+  <main class="panels">
 
-```js
-window.SUPABASE_CONFIG = {
-  SUPABASE_URL: "https://tuproyecto.supabase.co",
-  SUPABASE_ANON_KEY: "tu-anon-key-larga",
-};
-```
+    <!-- CARGAR -->
+    <section class="panel active" id="panel-cargar">
+      <div id="configWarning" class="warning-box" style="display:none">
+        ⚠️ Falta configurar la conexión a la base de datos en <code>config.js</code>. El formulario no va a poder guardar hasta que eso esté completo.
+      </div>
 
-Mientras esos valores tengan el texto `PEGAR_ACA...`, la app muestra un aviso y no deja guardar ni consultar.
+      <h2>Nuevo registro</h2>
+      <div class="grid-3">
+        <label>Línea
+          <select id="f-linea">
+            <option value="Camisas">Camisas</option>
+            <option value="Omera">Ómera</option>
+          </select>
+        </label>
+        <label>Fecha (día que se produjo)
+          <input type="date" id="f-fecha">
+        </label>
+        <label>Franja horaria
+          <select id="f-hora"></select>
+        </label>
+      </div>
 
-## 2. Crear la tabla (una sola vez)
+      <div class="grid-3">
+        <label>Modelo
+          <select id="f-modelo"></select>
+        </label>
+        <label id="f-operarios-wrap">Operarios
+          <select id="f-operarios">
+            <option value="1">1</option>
+            <option value="2">2</option>
+          </select>
+        </label>
+        <label>Evento / disponibilidad
+          <select id="f-evento"></select>
+        </label>
+      </div>
 
-En Supabase → SQL Editor, correr:
+      <div class="grid-3">
+        <label>PLAN (calculado)
+          <input type="text" id="f-plan" readonly>
+        </label>
+        <label>REAL producido
+          <input type="number" id="f-real" min="0" step="1">
+        </label>
+        <label>OA (calculado)
+          <input type="text" id="f-oa" readonly>
+        </label>
+      </div>
 
-```sql
-create table registro_pintura (
-  id bigint generated always as identity primary key,
-  fecha date not null,
-  linea text not null check (linea in ('Camisas', 'Omera')),
-  hora text not null,
-  modelo text,
-  operarios int,
-  factor_disponibilidad numeric not null default 1,
-  plan numeric,
-  real numeric,
-  oa numeric,
-  causa_categoria text,
-  causa_subcausa text,
-  turno_operador text,
-  creado_en timestamptz not null default now()
-);
+      <div id="causaWrap" class="grid-2" style="display:none">
+        <label>Categoría de falla
+          <select id="f-causa-cat"></select>
+        </label>
+        <label>Subcausa
+          <select id="f-causa-sub"></select>
+        </label>
+      </div>
 
-alter table registro_pintura enable row level security;
+      <div class="grid-2">
+        <label>Turno / operador (opcional)
+          <input type="text" id="f-turno" placeholder="Ej: Turno mañana - Juan P.">
+        </label>
+      </div>
 
-create policy "acceso_anonimo_total" on registro_pintura
-  for all using (true) with check (true);
-```
+      <button class="btn btn-primary" id="btnGuardar">Guardar registro</button>
+      <span id="guardarStatus" class="hint"></span>
+    </section>
 
-## 3. Publicar en GitHub Pages
+    <!-- CONSULTAR -->
+    <section class="panel" id="panel-consultar">
+      <h2>Historial</h2>
+      <div class="grid-3">
+        <label>Desde
+          <input type="date" id="q-desde">
+        </label>
+        <label>Hasta
+          <input type="date" id="q-hasta">
+        </label>
+        <label>Línea
+          <select id="q-linea">
+            <option value="">Todas</option>
+            <option value="Camisas">Camisas</option>
+            <option value="Omera">Ómera</option>
+          </select>
+        </label>
+      </div>
+      <button class="btn btn-add" id="btnBuscar">Buscar</button>
+      <button class="btn btn-export" id="btnExportar">Exportar a Excel</button>
 
-Mismo procedimiento que la app de gestión mensual: subís `index.html`, `app.js`,
-`styles.css`, `data.js` y `config.js` a un repo (puede ser este mismo u otro nuevo),
-activás Pages en Settings, y listo.
+      <div id="resumenBox" class="resumen-box" style="display:none">
+        <div><span class="resumen-label">Registros</span><span id="r-count" class="resumen-value">-</span></div>
+        <div><span class="resumen-label">Total REAL</span><span id="r-total" class="resumen-value">-</span></div>
+        <div><span class="resumen-label">OA promedio</span><span id="r-oa" class="resumen-value">-</span></div>
+      </div>
 
-**Importante:** `config.js` con tu key queda visible en un repo público — la `anon key`
-está diseñada para eso (es pública por definición, la protección real la da la política
-de la tabla en Supabase), pero si en algún momento agregás autenticación de usuarios,
-ahí sí conviene revisar qué se expone.
+      <div id="causasFrecuentes"></div>
 
-## 4. Cómo funciona el cálculo de PLAN
+      <div class="table-wrap">
+        <table id="resultTable">
+          <thead>
+            <tr><th>Fecha</th><th>Línea</th><th>Hora</th><th>Modelo</th><th>Plan</th><th>Real</th><th>OA</th><th>Causa</th><th>Turno</th><th></th></tr>
+          </thead>
+          <tbody id="resultBody"></tbody>
+        </table>
+      </div>
+    </section>
 
-```
-PLAN = Tasa base (según línea y operarios) × Factor de disponibilidad (según evento)
-```
+  </main>
 
-| Línea | Operarios | Tasa base |
-|---|---|---|
-| Camisas | 1 | 70/h |
-| Camisas | 2 | 85/h |
-| Ómera | 1 (fijo) | 160/h |
+  <footer class="app-footer"><span id="statusMsg"></span></footer>
+</div>
 
-| Evento | Factor |
-|---|---|
-| Normal | 1.0 |
-| Reunión inicio turno (10 min) | 0.83 |
-| Limpieza fin turno (10 min) | 0.83 |
-| Almuerzo (30 min) | 0.5 |
-| Desayuno (15 min) — Camisas (se releva al operario) | 1.0 |
-| Desayuno (15 min) — Ómera (sin relevo) | 0.75 |
-
-Todo esto está centralizado en `data.js` (`TASA_BASE`, `FACTORES`) — para ajustar un
-valor no hace falta tocar `app.js`.
-
-## 5. Árbol de causas de pérdida
-
-También vive en `data.js` (`CAUSAS`), agrupado en categorías para el desplegable en
-cascada. Si un ítem quedó mal categorizado o falta uno nuevo, se edita ahí directamente
-— es un objeto JS simple, categoría → lista de subcausas.
-
-Cuando el REAL cargado es menor al PLAN, el formulario exige elegir una causa antes
-de guardar.
-
-## 6. Multi-dispositivo
-
-Como la base vive en Supabase (no en el navegador), varios turnos pueden cargar desde
-distintos equipos y todos ven los mismos datos acumulados al instante — a diferencia
-de la app de gestión mensual, que guarda todo local a cada dispositivo.
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

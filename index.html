@@ -1,143 +1,93 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Registro Hora a Hora — Pintura</title>
-<link rel="stylesheet" href="styles.css">
-</head>
-<body>
-<div class="app">
+// Datos maestros del registro de pintura.
+// Organización de categorías del árbol de fallas: criterio propuesto para
+// hacer usable un desplegable en cascada — ajustable si no coincide con
+// cómo lo pensás vos.
 
-  <header class="app-header">
-    <div>
-      <h1>Registro Hora a Hora — Pintura</h1>
-      <p class="subtitle">Camisas / Ómera — carga diaria y consulta histórica</p>
-    </div>
-    <div class="logo-badge"><img src="assets/escorial-logo.png" alt="Escorial"></div>
-  </header>
+window.CAUSAS = {
+  "Falla Automatización": [
+    "Fuera de secuencia", "PLC", "Módulo de entradas", "Módulo de salidas",
+    "Red industrial", "HMI", "Encoder", "Sensor inductivo",
+    "Sensor fotoeléctrico", "Fin de carrera", "Pérdida de parámetros",
+  ],
+  "Falla Eléctrica": [
+    "Variador de frecuencia", "Motor principal", "Contactor", "Relé térmico",
+    "Fuente de alimentación", "Corte de energía", "Cortocircuito",
+    "Cableado defectuoso", "Tablero eléctrico",
+  ],
+  "Falla Seguridades": [
+    "Barrera fotoeléctrica", "Cerradura de puerta", "Rotura de protecciones",
+    "Botoneras / paradas de emergencia / bimanuales",
+  ],
+  "Falla Hidráulica": [
+    "Filtro tapado", "Aceite contaminado", "Sobrecalentamiento de aceite",
+    "Bomba hidráulica averiada", "Válvula defectuosa / trabada",
+    "Cilindro con fuga", "Rotura de manguera", "Ingreso de aire al circuito",
+    "Presión baja",
+  ],
+  "Falla Neumática": [
+    "Electroválvula", "Cilindro neumático", "Regulador de presión",
+    "Filtro saturado", "Secador de aire", "Compresor sin servicio",
+    "Racor dañado",
+  ],
+  "Falla Alimentador": [
+    "Desalineación de fleje", "Fleje fuera de medida",
+  ],
+  "Falla Mecánica / Prensa": [
+    "Falla desbobinador", "Falla guías de prensa", "Falla embrague / freno",
+    "Vibración excesiva de prensa",
+  ],
+  "Paradas Programadas / Gestión": [
+    "Parada programada", "Equipo no operativo (se genera MP)", "TPM",
+    "Falta operario", "Set up cambio de modelo", "Otros",
+  ],
+  "Calidad / Proceso": [
+    "Rebordeado defectuoso", "Fuera de dimensional materia prima",
+    "Punzonado NOK", "Defectos de rebordeado", "Defectos de punzonado",
+    "Defectos de superficie", "Materia prima no conforme",
+    "Capacidad del proceso insuficiente / fuera de STD",
+    "Tiempo de ciclo fuera de objetivo", "Desviación de set up",
+    "Falta de estándar",
+  ],
+  "Materiales / Logística": [
+    "Espera cambio de materia prima", "Espera autoelevador",
+    "Falta repuestos", "Rack lleno",
+  ],
+  "Herramental / Mantenimiento": [
+    "Revisión luz de rodillos", "Cambio de herramientas",
+    "HTE desactualizada", "HP de parámetros desactualizada",
+    "Rotura de punzón", "Rotura de matriz", "Desgaste de punzón",
+    "Desgaste de matriz", "Desalineación de herramental",
+    "Rotura de resorte", "Falta de mantenimiento de matriz",
+    "Herramental fuera de STD",
+  ],
+};
 
-  <nav class="tabs" id="tabs">
-    <button class="tab active" data-tab="cargar">Cargar</button>
-    <button class="tab" data-tab="consultar">Consultar</button>
-  </nav>
+// Modelos por línea (puramente descriptivo, no afecta el cálculo del PLAN)
+window.MODELOS = {
+  Camisas: ["120 LITROS", "90 LITROS", "80 LITROS", "55 LITROS", "45 LITROS"],
+  Omera: ["TAPA GAS", "PISO GAS", "TAPA SUPERIOR ELECTRICO", "TAPA INFERIOR ELECTRICO", "TAPA GEISER", "PISO GEISER"],
+};
 
-  <main class="panels">
+// Franjas horarias estándar de un turno
+window.FRANJAS_HORARIAS = [
+  "06:00-07:00", "07:00-08:00", "08:00-09:00", "09:00-10:00", "10:00-11:00",
+  "11:00-12:00", "12:00-13:00", "13:00-14:00", "14:00-15:00", "15:00-16:00",
+  "16:00-17:00", "17:00-18:00", "18:00-19:00", "19:00-20:00", "20:00-21:00",
+  "21:00-22:00", "22:00-23:00", "23:00-23:30",
+];
 
-    <!-- CARGAR -->
-    <section class="panel active" id="panel-cargar">
-      <div id="configWarning" class="warning-box" style="display:none">
-        ⚠️ Falta configurar la conexión a la base de datos en <code>config.js</code>. El formulario no va a poder guardar hasta que eso esté completo.
-      </div>
+// Tasa base de producción por línea
+window.TASA_BASE = {
+  Camisas: { 1: 70, 2: 85 },
+  Omera: { 1: 160 },
+};
 
-      <h2>Nuevo registro</h2>
-      <div class="grid-3">
-        <label>Línea
-          <select id="f-linea">
-            <option value="Camisas">Camisas</option>
-            <option value="Omera">Ómera</option>
-          </select>
-        </label>
-        <label>Fecha (día que se produjo)
-          <input type="date" id="f-fecha">
-        </label>
-        <label>Franja horaria
-          <select id="f-hora"></select>
-        </label>
-      </div>
-
-      <div class="grid-3">
-        <label>Modelo
-          <select id="f-modelo"></select>
-        </label>
-        <label id="f-operarios-wrap">Operarios
-          <select id="f-operarios">
-            <option value="1">1</option>
-            <option value="2">2</option>
-          </select>
-        </label>
-        <label>Evento / disponibilidad
-          <select id="f-evento"></select>
-        </label>
-      </div>
-
-      <div class="grid-3">
-        <label>PLAN (calculado)
-          <input type="text" id="f-plan" readonly>
-        </label>
-        <label>REAL producido
-          <input type="number" id="f-real" min="0" step="1">
-        </label>
-        <label>OA (calculado)
-          <input type="text" id="f-oa" readonly>
-        </label>
-      </div>
-
-      <div id="causaWrap" class="grid-2" style="display:none">
-        <label>Categoría de falla
-          <select id="f-causa-cat"></select>
-        </label>
-        <label>Subcausa
-          <select id="f-causa-sub"></select>
-        </label>
-      </div>
-
-      <div class="grid-2">
-        <label>Turno / operador (opcional)
-          <input type="text" id="f-turno" placeholder="Ej: Turno mañana - Juan P.">
-        </label>
-      </div>
-
-      <button class="btn btn-primary" id="btnGuardar">Guardar registro</button>
-      <span id="guardarStatus" class="hint"></span>
-    </section>
-
-    <!-- CONSULTAR -->
-    <section class="panel" id="panel-consultar">
-      <h2>Historial</h2>
-      <div class="grid-3">
-        <label>Desde
-          <input type="date" id="q-desde">
-        </label>
-        <label>Hasta
-          <input type="date" id="q-hasta">
-        </label>
-        <label>Línea
-          <select id="q-linea">
-            <option value="">Todas</option>
-            <option value="Camisas">Camisas</option>
-            <option value="Omera">Ómera</option>
-          </select>
-        </label>
-      </div>
-      <button class="btn btn-add" id="btnBuscar">Buscar</button>
-
-      <div id="resumenBox" class="resumen-box" style="display:none">
-        <div><span class="resumen-label">Registros</span><span id="r-count" class="resumen-value">-</span></div>
-        <div><span class="resumen-label">Total REAL</span><span id="r-total" class="resumen-value">-</span></div>
-        <div><span class="resumen-label">OA promedio</span><span id="r-oa" class="resumen-value">-</span></div>
-      </div>
-
-      <div id="causasFrecuentes"></div>
-
-      <div class="table-wrap">
-        <table id="resultTable">
-          <thead>
-            <tr><th>Fecha</th><th>Línea</th><th>Hora</th><th>Modelo</th><th>Plan</th><th>Real</th><th>OA</th><th>Causa</th><th>Turno</th></tr>
-          </thead>
-          <tbody id="resultBody"></tbody>
-        </table>
-      </div>
-    </section>
-
-  </main>
-
-  <footer class="app-footer"><span id="statusMsg"></span></footer>
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="config.js"></script>
-<script src="data.js"></script>
-<script src="app.js"></script>
-</body>
-</html>
+// Factor de disponibilidad por evento — Desayuno es la única celda que
+// difiere entre líneas (en Camisas se releva al operario, en Ómera no).
+window.FACTORES = {
+  Normal: { Camisas: 1.0, Omera: 1.0 },
+  "Reunión inicio turno (10 min)": { Camisas: 0.83, Omera: 0.83 },
+  "Limpieza fin turno (10 min)": { Camisas: 0.83, Omera: 0.83 },
+  "Almuerzo (30 min)": { Camisas: 0.5, Omera: 0.5 },
+  "Desayuno (15 min)": { Camisas: 1.0, Omera: 0.75 },
+};
